@@ -15,21 +15,24 @@
  */
 package feign.examples;
 
-import static feign.Util.UTF_8;
 import static feign.Util.ensureClosed;
+
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.lang.reflect.Type;
+import java.nio.charset.Charset;
+import java.util.List;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonIOException;
+
 import feign.Feign;
 import feign.Logger;
 import feign.Param;
 import feign.RequestLine;
 import feign.Response;
 import feign.codec.Decoder;
-import java.io.IOException;
-import java.io.Reader;
-import java.lang.reflect.Type;
-import java.util.List;
 
 /** adapted from {@code com.example.retrofit.GitHubClient} */
 public class GitHubExample {
@@ -71,7 +74,7 @@ public class GitHubExample {
       if (void.class == type || response.body() == null) {
         return null;
       }
-      Reader reader = response.body().asReader(UTF_8);
+      Reader reader = Response.Body.bodyAsReader(response.body()).orElseThrow();
       try {
         return gson.fromJson(reader, type);
       } catch (JsonIOException e) {

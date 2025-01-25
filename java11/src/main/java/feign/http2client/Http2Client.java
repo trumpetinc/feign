@@ -131,7 +131,7 @@ public class Http2Client implements Client, AsyncClient<Object> {
 
     return Response.builder()
         .protocolVersion(enumForName(ProtocolVersion.class, httpResponse.version()))
-        .body(httpResponse.body(), length.isPresent() ? (int) length.getAsLong() : null)
+        .body(httpResponse.body(), length.isPresent() ? length.getAsLong() : null)
         .reason(httpResponse.headers().firstValue("Reason-Phrase").orElse(null))
         .request(request)
         .status(httpResponse.statusCode())

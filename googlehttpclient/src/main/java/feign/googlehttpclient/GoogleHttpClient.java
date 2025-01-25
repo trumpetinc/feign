@@ -110,13 +110,9 @@ public class GoogleHttpClient implements Client {
 
   private final Response convertResponse(
       final Request inputRequest, final HttpResponse inputResponse) throws IOException {
-    final HttpHeaders headers = inputResponse.getHeaders();
-    Integer contentLength = null;
-    if (headers.getContentLength() != null && headers.getContentLength() <= Integer.MAX_VALUE) {
-      contentLength = inputResponse.getHeaders().getContentLength().intValue();
-    }
+
     return Response.builder()
-        .body(inputResponse.getContent(), contentLength)
+        .body(inputResponse.getContent(), inputResponse.getHeaders().getContentLength())
         .status(inputResponse.getStatusCode())
         .reason(inputResponse.getStatusMessage())
         .headers(toMap(inputResponse.getHeaders()))

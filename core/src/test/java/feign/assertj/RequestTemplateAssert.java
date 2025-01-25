@@ -17,6 +17,7 @@ package feign.assertj;
 
 import static feign.Util.UTF_8;
 
+import feign.Request;
 import feign.RequestTemplate;
 import org.assertj.core.api.AbstractAssert;
 import org.assertj.core.data.MapEntry;
@@ -58,7 +59,9 @@ public final class RequestTemplateAssert
     if (actual.bodyTemplate() != null) {
       failWithMessage("\nExpecting bodyTemplate to be null, but was:<%s>", actual.bodyTemplate());
     }
-    objects.assertEqual(info, new String(actual.body(), UTF_8), utf8Expected);
+    
+    // TODO: KD - original was explicitly setting utf8 - this new code is going to use the encoding the body - if that isn't utf8, then things could fail
+    objects.assertEqual(info, Request.Body.bodyAsString(actual.body()).orElse(""), utf8Expected);
     return this;
   }
 
@@ -67,7 +70,7 @@ public final class RequestTemplateAssert
     if (actual.bodyTemplate() != null) {
       failWithMessage("\nExpecting bodyTemplate to be null, but was:<%s>", actual.bodyTemplate());
     }
-    arrays.assertContains(info, actual.body(), expected);
+    arrays.assertContains(info, Request.Body.bodyAsBytes(actual.body()).orElseThrow(), expected);
     return this;
   }
 
@@ -107,7 +110,7 @@ public final class RequestTemplateAssert
       if (actual.body() != null) {
         failWithMessage(
             "\nExpecting requestBody.data to be null, but was:<%s>",
-            new String(actual.body(), actual.requestCharset()));
+            Request.Body.bodyAsString(actual.body()) );
       }
     }
     return this;

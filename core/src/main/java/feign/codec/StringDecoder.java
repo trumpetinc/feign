@@ -17,6 +17,7 @@ package feign.codec;
 
 import static java.lang.String.format;
 
+import feign.Request;
 import feign.Response;
 import feign.Util;
 import java.io.IOException;
@@ -31,7 +32,8 @@ public class StringDecoder implements Decoder {
       return null;
     }
     if (String.class.equals(type)) {
-      return Util.toString(body.asReader(Util.UTF_8));
+// TODO: KD - original code assumed that body encoding was UTF8, hopefully it is OK to use the actual encoding in the Body now?
+    	return Response.Body.bodyAsString(body).orElse("");
     }
     throw new DecodeException(
         response.status(),

@@ -193,7 +193,7 @@ class FeignExceptionTest {
     Response response =
         Response.builder()
             .request(request)
-            .body("some text", StandardCharsets.UTF_8)
+            .body(Response.Body.create("some text".getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8))
             .headers(responseHeaders)
             .build();
 
@@ -249,7 +249,7 @@ class FeignExceptionTest {
         Response.builder()
             .status(400)
             .request(request)
-            .body(bigResponse, StandardCharsets.UTF_8)
+            .body(Response.Body.create(bigResponse.getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8))
             .build();
 
     FeignException defaultException = FeignException.errorStatus("methodKey", response);

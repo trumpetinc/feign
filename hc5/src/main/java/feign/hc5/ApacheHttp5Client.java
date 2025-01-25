@@ -19,6 +19,7 @@ import static feign.Util.UTF_8;
 import static feign.Util.enumForName;
 
 import feign.Client;
+import feign.FeignException;
 import feign.Request;
 import feign.Response;
 import feign.Util;
@@ -34,6 +35,8 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+
 import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.hc.client5.http.config.Configurable;
 import org.apache.hc.client5.http.config.RequestConfig;
@@ -49,6 +52,7 @@ import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.http.NameValuePair;
 import org.apache.hc.core5.http.io.entity.ByteArrayEntity;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.http.io.entity.InputStreamEntity;
 import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.hc.core5.http.io.support.ClassicRequestBuilder;
 import org.apache.hc.core5.net.URIBuilder;
@@ -158,28 +162,13 @@ public final class ApacheHttp5Client implements Client {
 
     // request body
     // final Body requestBody = request.requestBody();
-    byte[] data = request.body();
-    if (data != null) {
-      HttpEntity entity;
-      if (request.isBinary()) {
-        entity = new ByteArrayEntity(data, null);
-      } else {
-        final ContentType contentType = getContentType(request);
-        String content;
-        if (request.charset() != null) {
-          content = new String(data, request.charset());
-        } else {
-          content = new String(data);
-        }
-        entity = new StringEntity(content, contentType);
-      }
-      if (isGzip) {
+    
+    HttpEntity entity = new InputStreamEntity(request.body().asInputStream(), request.body().length(), getContentType(request), request.body().getCharset().map(cs -> cs.name()).orElse(null));
+    if (isGzip) {
         entity = new GzipCompressingEntity(entity);
-      }
-      requestBuilder.setEntity(entity);
-    } else {
-      requestBuilder.setEntity(new ByteArrayEntity(new byte[0], null));
     }
+
+    requestBuilder.setEntity(entity);
 
     return requestBuilder.build();
   }
@@ -238,10 +227,8 @@ public final class ApacheHttp5Client implements Client {
     return new Response.Body() {
 
       @Override
-      public Integer length() {
-        return entity.getContentLength() >= 0 && entity.getContentLength() <= Integer.MAX_VALUE
-            ? (int) entity.getContentLength()
-            : null;
+      public long length() {
+        return entity.getContentLength();
       }
 
       @Override
@@ -250,19 +237,13 @@ public final class ApacheHttp5Client implements Client {
       }
 
       @Override
-      public InputStream asInputStream() throws IOException {
-        return entity.getContent();
-      }
-
-      @Override
-      public Reader asReader() throws IOException {
-        return new InputStreamReader(asInputStream(), UTF_8);
-      }
-
-      @Override
-      public Reader asReader(Charset charset) throws IOException {
-        Util.checkNotNull(charset, "charset should not be null");
-        return new InputStreamReader(asInputStream(), charset);
+      public InputStream asInputStream() {
+        try {
+			return entity.getContent();
+		} catch (IOException e) {
+// TODO: KD - what exception should we throw here?  I'd really prefer to now have asInputStream throw a checked IOException...
+			throw new RuntimeException(e.getMessage(), e);
+		}
       }
 
       @Override
@@ -273,6 +254,11 @@ public final class ApacheHttp5Client implements Client {
           httpResponse.close();
         }
       }
+
+		@Override
+		public Optional<Charset> getCharset() {
+			return Optional.of( Charset.forName( entity.getContentEncoding() ) );
+		}
     };
   }
 }

@@ -147,7 +147,7 @@ public class DefaultErrorDecoderHttpErrorTest {
                     null,
                     Util.UTF_8))
             .headers(headers)
-            .body("response body", Util.UTF_8)
+            .body(Response.Body.create("response body".getBytes(Util.UTF_8), Util.UTF_8))
             .build();
 
     Exception exception = errorDecoder.decode("Service#foo()", response);

@@ -952,20 +952,16 @@ public class AsyncFeignTest {
 
   private ResponseMapper upperCaseResponseMapper() {
     return (response, type) -> {
-      try {
         return response.toBuilder()
-            .body(Util.toString(response.body().asReader()).toUpperCase().getBytes())
+            .body(Response.Body.transformResponseBodyAsString(response.body(), s -> s.toUpperCase()))
             .build();
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
     };
   }
 
   @SuppressWarnings("deprecation")
   private Response responseWithText(String text) {
     return Response.builder()
-        .body(text, Util.UTF_8)
+        .body(Response.Body.create(text.getBytes(UTF_8), UTF_8))
         .status(200)
         .request(Request.create(HttpMethod.GET, "/api", Collections.emptyMap(), null, Util.UTF_8))
         .headers(new HashMap<>())

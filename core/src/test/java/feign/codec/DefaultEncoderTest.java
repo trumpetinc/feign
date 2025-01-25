@@ -15,14 +15,16 @@
  */
 package feign.codec;
 
-import static feign.Util.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import feign.RequestTemplate;
 import java.time.Clock;
 import java.util.Arrays;
+
 import org.junit.jupiter.api.Test;
+
+import feign.Request;
+import feign.RequestTemplate;
 
 class DefaultEncoderTest {
 
@@ -33,7 +35,7 @@ class DefaultEncoderTest {
     String content = "This is my content";
     RequestTemplate template = new RequestTemplate();
     encoder.encode(content, String.class, template);
-    assertThat(new String(template.body(), UTF_8)).isEqualTo(content);
+    assertThat(Request.Body.bodyAsString(template.body())).isEqualTo(content);
   }
 
   @Test
@@ -41,7 +43,8 @@ class DefaultEncoderTest {
     byte[] content = {12, 34, 56};
     RequestTemplate template = new RequestTemplate();
     encoder.encode(content, byte[].class, template);
-    assertThat(Arrays.equals(content, template.body())).isTrue();
+    
+    assertThat(Arrays.equals(content, Request.Body.bodyAsBytes(template.body()).orElseThrow())).isTrue();
   }
 
   @Test

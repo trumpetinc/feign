@@ -67,7 +67,7 @@ public class TargetTest {
                 urlEncoded.url().replace("%2F", "/"),
                 urlEncoded.headers(),
                 urlEncoded.body(),
-                urlEncoded.charset());
+                input);
           }
         };
 

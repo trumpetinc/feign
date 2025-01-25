@@ -57,7 +57,7 @@ public class FeignBuilderTest {
     TestInterface api = Feign.builder().target(TestInterface.class, url);
 
     Response response = api.codecPost("request data");
-    assertThat(Util.toString(response.body().asReader(Util.UTF_8))).isEqualTo("response data");
+    assertThat(Response.Body.bodyAsString(response.body()).orElse("")).isEqualTo("response data");
 
     assertThat(server.takeRequest()).hasBody("request data");
   }
@@ -263,7 +263,7 @@ public class FeignBuilderTest {
     TestInterface api =
         Feign.builder().requestInterceptor(requestInterceptor).target(TestInterface.class, url);
     Response response = api.codecPost("request data");
-    assertThat("response data").isEqualTo(Util.toString(response.body().asReader(Util.UTF_8)));
+    assertThat("response data").isEqualTo(Response.Body.bodyAsString(response.body()).orElse(""));
 
     assertThat(server.takeRequest())
         .hasHeaders(MapEntry.entry("Content-Type", Collections.singletonList("text/plain")))
@@ -292,7 +292,7 @@ public class FeignBuilderTest {
     TestInterface api =
         Feign.builder().invocationHandlerFactory(factory).target(TestInterface.class, url);
     Response response = api.codecPost("request data");
-    assertThat(Util.toString(response.body().asReader(Util.UTF_8))).isEqualTo("response data");
+    assertThat(Response.Body.bodyAsString(response.body()).orElse("")).isEqualTo("response data");
     assertThat(callCount.get()).isEqualTo(1);
 
     assertThat(server.takeRequest()).hasBody("request data");
@@ -328,7 +328,7 @@ public class FeignBuilderTest {
     TestInterface api = Feign.builder().target(TestInterface.class, url);
 
     Response response = api.defaultMethodPassthrough();
-    assertThat(Util.toString(response.body().asReader(Util.UTF_8))).isEqualTo("response data");
+    assertThat(Response.Body.bodyAsString(response.body()).orElse("")).isEqualTo("response data");
     assertThat(server.takeRequest()).hasPath("/");
   }
 
@@ -359,10 +359,7 @@ public class FeignBuilderTest {
               @Override
               public Object next() {
                 try {
-                  return Util.toString(response.body().asReader(Util.UTF_8));
-                } catch (IOException e) {
-                  fail("", e.getMessage());
-                  return null;
+                  return Response.Body.bodyAsString(response.body()).orElse("");
                 } finally {
                   Util.ensureClosed(response);
                   called = true;
@@ -414,7 +411,7 @@ public class FeignBuilderTest {
                         .body(
                             new Response.Body() {
                               @Override
-                              public Integer length() {
+                              public Long length() {
                                 return original.body().length();
                               }
 
@@ -424,19 +421,8 @@ public class FeignBuilderTest {
                               }
 
                               @Override
-                              public InputStream asInputStream() throws IOException {
+                              public InputStream asInputStream() {
                                 return original.body().asInputStream();
-                              }
-
-                              @SuppressWarnings("deprecation")
-                              @Override
-                              public Reader asReader() throws IOException {
-                                return original.body().asReader(Util.UTF_8);
-                              }
-
-                              @Override
-                              public Reader asReader(Charset charset) throws IOException {
-                                return original.body().asReader(charset);
                               }
 
                               @Override
@@ -444,6 +430,11 @@ public class FeignBuilderTest {
                                 closed.set(true);
                                 original.body().close();
                               }
+                              
+                              @Override
+                            	public Optional<Charset> getCharset() {
+                            		return original.body().getCharset();
+                            	}
                             })
                         .build();
                   }

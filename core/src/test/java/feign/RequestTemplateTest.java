@@ -345,7 +345,7 @@ public class RequestTemplateTest {
         .hasHeaders(
             entry(
                 "Content-Length",
-                Collections.singletonList(String.valueOf(template.body().length))));
+                Collections.singletonList(String.valueOf(template.body().length()))));
   }
 
   @Test

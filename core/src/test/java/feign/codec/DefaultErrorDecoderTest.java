@@ -66,7 +66,7 @@ class DefaultErrorDecoderTest {
             .request(
                 Request.create(HttpMethod.GET, "/api", Collections.emptyMap(), null, Util.UTF_8))
             .headers(headers)
-            .body("hello world", UTF_8)
+            .body(Response.Body.create("hello world".getBytes(UTF_8), UTF_8))
             .build();
 
     try {
@@ -89,7 +89,7 @@ class DefaultErrorDecoderTest {
             .request(
                 Request.create(HttpMethod.GET, "/api", Collections.emptyMap(), null, Util.UTF_8))
             .headers(headers)
-            .body(actualBody, UTF_8)
+            .body(Response.Body.create(actualBody.getBytes(UTF_8), UTF_8))
             .build();
     String expectedBody = repeatString("hello world ", 16) + "hello wo... (2400 bytes)";
 
@@ -152,11 +152,11 @@ class DefaultErrorDecoderTest {
   void lengthOfBodyExceptionTest() {
     Response response = bigBodyResponse();
     Exception defaultException = errorDecoder.decode("Service#foo()", response);
-    assertThat(defaultException.getMessage().length()).isLessThan(response.body().length());
+    assertThat((long)defaultException.getMessage().length()).isLessThan(response.body().length());
 
     ErrorDecoder customizedErrorDecoder = new ErrorDecoder.Default(4000, 2000);
     Exception customizedException = customizedErrorDecoder.decode("Service#foo()", response);
-    assertThat(customizedException.getMessage().length())
+    assertThat((long)customizedException.getMessage().length())
         .isGreaterThanOrEqualTo(response.body().length());
   }
 
@@ -197,7 +197,7 @@ class DefaultErrorDecoderTest {
                 "data".getBytes(Util.UTF_8),
                 Util.UTF_8,
                 null))
-        .body(content, Util.UTF_8)
+        .body(Response.Body.create(content.getBytes(UTF_8), UTF_8))
         .build();
   }
 }

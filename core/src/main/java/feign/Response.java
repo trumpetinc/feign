@@ -15,13 +15,26 @@
  */
 package feign;
 
-import static feign.Util.*;
+import static feign.Util.caseInsensitiveCopyOf;
+import static feign.Util.checkNotNull;
+import static feign.Util.checkState;
+import static feign.Util.valuesOrEmpty;
 
-import feign.Request.ProtocolVersion;
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.Closeable;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.Collection;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.Function;
+
+import feign.Request.Body;
+import feign.Request.ProtocolVersion;
 
 /** An immutable response to an http invocation which only returns string content. */
 public final class Response implements Closeable {
@@ -39,8 +52,21 @@ public final class Response implements Closeable {
     this.request = builder.request;
     this.reason = builder.reason; // nullable
     this.headers = caseInsensitiveCopyOf(builder.headers);
-    this.body = builder.body; // nullable
     this.protocolVersion = builder.protocolVersion;
+    
+    Charset charset = computeCharsetFromHeaders(headers);
+    Body body;
+    if (builder.body != null)
+    	body = builder.body;
+    else if (builder.bodyBytes != null)
+    	body = Body.create(builder.bodyBytes, charset);
+    else if (builder.bodyInputStream != null)
+    	body = Body.create(builder.bodyInputStream, builder.bodyLength, charset);
+    else
+    	body = Body.empty();
+    
+    this.body = body;
+
   }
 
   public Builder toBuilder() {
@@ -56,8 +82,13 @@ public final class Response implements Closeable {
     int status;
     String reason;
     Map<String, Collection<String>> headers;
-    Body body;
+    
+    Body body = Response.Body.empty();
+    InputStream bodyInputStream;
+    byte[] bodyBytes;
+    Long bodyLength;
     Request request;
+    
     private RequestTemplate requestTemplate;
     private ProtocolVersion protocolVersion = DEFAULT_PROTOCOL_VERSION;
 
@@ -96,36 +127,39 @@ public final class Response implements Closeable {
       return this;
     }
 
+    private void clearBody() {
+    	this.body = null;
+    	this.bodyBytes = null;
+    	this.bodyInputStream = null;
+    	this.bodyLength = null;
+    }
+    
     /**
      * @see Response#body
      */
     public Builder body(Body body) {
-      this.body = body;
-      return this;
+    	clearBody();
+    	this.body = body;
+    	return this;
     }
 
     /**
      * @see Response#body
      */
-    public Builder body(InputStream inputStream, Integer length) {
-      this.body = InputStreamBody.orNull(inputStream, length);
-      return this;
+    public Builder body(InputStream inputStream, long length) {
+    	clearBody();
+    	this.bodyInputStream = inputStream;
+    	this.bodyLength = length;
+    	return this;
     }
 
     /**
      * @see Response#body
      */
     public Builder body(byte[] data) {
-      this.body = ByteArrayBody.orNull(data);
-      return this;
-    }
-
-    /**
-     * @see Response#body
-     */
-    public Builder body(String text, Charset charset) {
-      this.body = ByteArrayBody.orNull(text, charset);
-      return this;
+    	clearBody();
+    	this.bodyBytes = data;
+    	return this;
     }
 
     /**
@@ -210,22 +244,31 @@ public final class Response implements Closeable {
    */
   public Charset charset() {
 
-    Collection<String> contentTypeHeaders = headers().get("Content-Type");
+	  // TODO: KD - should we use the body charset, or should we always use the header charset?  In most cases, the body charset is determined by the headers, but if the response is transformed to have a different body type, I would think we'd want to use the body charset and not the headers...
+	  return body.getCharset().orElse(StandardCharsets.UTF_8);
+	  
+  }
+  
+  // TODO: KD - protected b/c we need this in FeignException to compute the charset - we can switch this back to private if we can get rid of some of the feignexception constructors
+  static Charset computeCharsetFromHeaders(Map<String, Collection<String>> headers) {
+	  
+	  Collection<String> contentTypeHeaders = headers.get("Content-Type");
+	  
+	    if (contentTypeHeaders != null) {
+	        for (String contentTypeHeader : contentTypeHeaders) {
+	          String[] contentTypeParmeters = contentTypeHeader.split(";");
+	          if (contentTypeParmeters.length > 1) {
+	            String[] charsetParts = contentTypeParmeters[1].split("=");
+	            if (charsetParts.length == 2 && "charset".equalsIgnoreCase(charsetParts[0].trim())) {
+	              String charsetString = charsetParts[1].replaceAll("\"", "");
+	              return Charset.forName(charsetString);
+	            }
+	          }
+	        }
+	      }
 
-    if (contentTypeHeaders != null) {
-      for (String contentTypeHeader : contentTypeHeaders) {
-        String[] contentTypeParmeters = contentTypeHeader.split(";");
-        if (contentTypeParmeters.length > 1) {
-          String[] charsetParts = contentTypeParmeters[1].split("=");
-          if (charsetParts.length == 2 && "charset".equalsIgnoreCase(charsetParts[0].trim())) {
-            String charsetString = charsetParts[1].replaceAll("\"", "");
-            return Charset.forName(charsetString);
-          }
-        }
-      }
-    }
-
-    return Util.UTF_8;
+	      return Util.UTF_8;
+	  
   }
 
   @Override
@@ -248,8 +291,48 @@ public final class Response implements Closeable {
     Util.ensureClosed(body);
   }
 
+  // TODO: KD - Request and Response.Body are identical now - I would really like to collapse these to a single interface and class hierarchy...  Maybe HttpBody ?
   public interface Body extends Closeable {
 
+		public static Body create(InputStream inputStream, long length, Charset charset) {
+			return new InputStreamBody(inputStream, length, charset);
+		}
+		
+		public static Body create(byte[] bytes, Charset charset){
+			return new ByteArrayBody(bytes, charset);
+		}
+		
+		public static Body empty() {
+			return new EmptyBody();
+		}
+	  
+		public static Optional<String> bodyAsString(Body body) {
+	    	try {
+	  	      return Optional.of( new String(body.asInputStream().readAllBytes(), body.getCharset().orElse(StandardCharsets.UTF_8)) );
+	      	} catch (IOException ignore) {}
+	    	
+	    	return Optional.empty();
+		}
+		
+		// used for testing
+		static Optional<Reader> bodyAsReader(Body body) {
+			if (body.getCharset().isEmpty()) return Optional.empty();
+			
+			return Optional.of( new InputStreamReader(body.asInputStream(), body.getCharset().orElseThrow()) );
+		}
+		
+		// used for testing
+		static Body transformResponseBodyAsString(Response.Body inBody, Function<String, String> func) {
+			String str = Response.Body.bodyAsString(inBody).orElse("");
+			String alt = func.apply(str);
+			return Response.Body.create(alt.getBytes(), inBody.getCharset().orElse(StandardCharsets.UTF_8));
+		}
+		
+		// used for testing
+		static Body createFromRequestBody(Request.Body inBody) {
+			return Response.Body.create(inBody.asInputStream(), inBody.length(), inBody.getCharset().orElse(null));
+		}
+		
     /**
      * length in bytes, if known. Null if unknown or greater than {@link Integer#MAX_VALUE}. <br>
      * <br>
@@ -257,47 +340,62 @@ public final class Response implements Closeable {
      * <b>Note</b><br>
      * This is an integer as most implementations cannot do bodies greater than 2GB.
      */
-    Integer length();
+		Long length();
 
     /** True if {@link #asInputStream()} and {@link #asReader()} can be called more than once. */
     boolean isRepeatable();
 
     /** It is the responsibility of the caller to close the stream. */
-    InputStream asInputStream() throws IOException;
+    InputStream asInputStream();
 
-    /**
-     * It is the responsibility of the caller to close the stream.
-     *
-     * @deprecated favor {@link Body#asReader(Charset)}
-     */
-    @Deprecated
-    default Reader asReader() throws IOException {
-      return asReader(StandardCharsets.UTF_8);
-    }
-
-    /** It is the responsibility of the caller to close the stream. */
-    Reader asReader(Charset charset) throws IOException;
+	  Optional<Charset> getCharset();
+    
   }
 
+  private static class EmptyBody implements Body{
+
+	@Override
+	public void close() throws IOException {
+
+	}
+
+	@Override
+	public Long length() {
+		return null;
+	}
+
+	@Override
+	public boolean isRepeatable() {
+		return true;
+	}
+
+	@Override
+	public InputStream asInputStream() {
+		return new ByteArrayInputStream(new byte[0]);
+	}
+
+	@Override
+	public Optional<Charset> getCharset() {
+		return Optional.empty();
+	}
+	  
+  }
+
+  
   private static final class InputStreamBody implements Response.Body {
 
     private final InputStream inputStream;
-    private final Integer length;
+    private final Long length;
+    private final Optional<Charset> charset;
 
-    private InputStreamBody(InputStream inputStream, Integer length) {
+    private InputStreamBody(InputStream inputStream, long length, Charset charset) {
       this.inputStream = inputStream;
       this.length = length;
-    }
-
-    private static Body orNull(InputStream inputStream, Integer length) {
-      if (inputStream == null) {
-        return null;
-      }
-      return new InputStreamBody(inputStream, length);
+      this.charset = Optional.ofNullable(charset);
     }
 
     @Override
-    public Integer length() {
+    public Long length() {
       return length;
     }
 
@@ -311,50 +409,31 @@ public final class Response implements Closeable {
       return inputStream;
     }
 
-    @SuppressWarnings("deprecation")
-    @Override
-    public Reader asReader() {
-      return new InputStreamReader(inputStream, UTF_8);
-    }
-
-    @Override
-    public Reader asReader(Charset charset) {
-      checkNotNull(charset, "charset should not be null");
-      return new InputStreamReader(inputStream, charset);
-    }
-
     @Override
     public void close() throws IOException {
       inputStream.close();
     }
+
+	@Override
+	public Optional<Charset> getCharset() {
+		return charset;
+	}
   }
 
   private static final class ByteArrayBody implements Response.Body {
 
     private final byte[] data;
+    private final Optional<Charset> charset;
 
-    public ByteArrayBody(byte[] data) {
+    public ByteArrayBody(byte[] data, Charset charset) {
       this.data = data;
+      this.charset = Optional.ofNullable(charset);
     }
 
-    private static Body orNull(byte[] data) {
-      if (data == null) {
-        return null;
-      }
-      return new ByteArrayBody(data);
-    }
-
-    private static Body orNull(String text, Charset charset) {
-      if (text == null) {
-        return null;
-      }
-      checkNotNull(charset, "charset");
-      return new ByteArrayBody(text.getBytes(charset));
-    }
 
     @Override
-    public Integer length() {
-      return data.length;
+    public Long length() {
+      return (long)data.length;
     }
 
     @Override
@@ -367,18 +446,12 @@ public final class Response implements Closeable {
       return new ByteArrayInputStream(data);
     }
 
-    @SuppressWarnings("deprecation")
-    @Override
-    public Reader asReader() {
-      return new InputStreamReader(asInputStream(), UTF_8);
-    }
+	@Override
+	public Optional<Charset> getCharset() {
+		return charset;
+	}
 
-    @Override
-    public Reader asReader(Charset charset) {
-      checkNotNull(charset, "charset should not be null");
-      return new InputStreamReader(asInputStream(), charset);
-    }
-
+    
     @Override
     public void close() {}
   }

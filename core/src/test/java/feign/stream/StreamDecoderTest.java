@@ -18,24 +18,28 @@ package feign.stream;
 import static feign.Util.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.BufferedReader;
+import java.io.Closeable;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import org.junit.jupiter.api.Test;
+
 import com.fasterxml.jackson.core.type.TypeReference;
+
 import feign.Feign;
 import feign.Request;
 import feign.Request.HttpMethod;
 import feign.RequestLine;
 import feign.Response;
 import feign.Util;
-import java.io.BufferedReader;
-import java.io.Closeable;
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
-import org.junit.jupiter.api.Test;
 
 @SuppressWarnings("deprecation")
 class StreamDecoderTest {
@@ -80,7 +84,7 @@ class StreamDecoderTest {
             .decoder(
                 StreamDecoder.create(
                     (response, type) ->
-                        new BufferedReader(response.body().asReader(UTF_8)).lines().iterator()))
+                        new BufferedReader(Response.Body.bodyAsReader(response.body()).orElseThrow()).lines().iterator()))
             .doNotCloseAfterDecode()
             .target(StreamInterface.class, server.url("/").toString());
 
@@ -99,7 +103,7 @@ class StreamDecoderTest {
             .decoder(
                 StreamDecoder.create(
                     (r, t) -> {
-                      BufferedReader bufferedReader = new BufferedReader(r.body().asReader(UTF_8));
+                      BufferedReader bufferedReader = new BufferedReader(Response.Body.bodyAsReader(r.body()).orElseThrow());
                       return bufferedReader.lines().iterator();
                     }))
             .doNotCloseAfterDecode()
@@ -120,7 +124,7 @@ class StreamDecoderTest {
             .decoder(
                 StreamDecoder.create(
                     (r, t) -> {
-                      BufferedReader bufferedReader = new BufferedReader(r.body().asReader(UTF_8));
+                      BufferedReader bufferedReader = new BufferedReader(Response.Body.bodyAsReader(r.body()).orElseThrow());
                       return bufferedReader.lines().iterator();
                     },
                     (r, t) -> "str"))
@@ -140,7 +144,7 @@ class StreamDecoderTest {
             .headers(Collections.emptyMap())
             .request(
                 Request.create(HttpMethod.GET, "/api", Collections.emptyMap(), null, Util.UTF_8))
-            .body("", UTF_8)
+            .body(Response.Body.empty())
             .build();
 
     TestCloseableIterator it = new TestCloseableIterator();

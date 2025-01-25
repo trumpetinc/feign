@@ -45,10 +45,10 @@ class ClientTest {
             Response.builder()
                 .status(200)
                 .request(request)
-                .body("Hello, World!", Charset.defaultCharset())
+                .body(Response.Body.create("Hello, World!".getBytes(Charset.defaultCharset()), Charset.defaultCharset()))
                 .build());
     Response response = client.execute(request, null);
-    String result = Util.toString(response.body().asReader(Charset.defaultCharset()));
+    String result = Response.Body.bodyAsString(response.body()).orElse("");
     assertEquals("Hello, World!", result);
   }
 

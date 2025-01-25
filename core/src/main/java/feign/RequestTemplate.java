@@ -38,6 +38,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -61,6 +62,8 @@ public final class RequestTemplate implements Serializable {
   private UriTemplate uriTemplate;
   private BodyTemplate bodyTemplate;
   private HttpMethod method;
+  
+  // TODO: KD - consider removing charset field and use the Body's charset - I don't think there is any need for charset outside of body handling, right??
   private transient Charset charset = Util.UTF_8;
   private Request.Body body = Request.Body.empty();
   private boolean decodeSlash = true;
@@ -868,6 +871,7 @@ public final class RequestTemplate implements Serializable {
    * @param charset of the encoded data.
    * @return a RequestTemplate for chaining.
    */
+  // TODO: Consider getting rid of this - callers could easily pass in a Body object, not raw parameters like this...
   public RequestTemplate body(byte[] data, Charset charset) {
     this.body(Request.Body.create(data, charset));
     return this;
@@ -879,6 +883,7 @@ public final class RequestTemplate implements Serializable {
    * @param bodyText to send.
    * @return a RequestTemplate for chaining.
    */
+  // TODO: Consider getting rid of this - callers could easily pass in a Body object, not raw parameters like this...
   public RequestTemplate body(String bodyText) {
     this.body(Request.Body.create(bodyText.getBytes(this.charset), this.charset));
     return this;
@@ -889,11 +894,9 @@ public final class RequestTemplate implements Serializable {
    *
    * @param body to send.
    * @return a RequestTemplate for chaining.
-   * @deprecated use {@link #body(byte[], Charset)} instead.
    */
-  @Deprecated
   public RequestTemplate body(Request.Body body) {
-    this.body = body;
+    this.body = Objects.requireNonNull( body );
 
     /* body template must be cleared to prevent double processing */
     this.bodyTemplate = null;
@@ -906,37 +909,37 @@ public final class RequestTemplate implements Serializable {
     return this;
   }
 
-  /**
-   * Charset of the Request Body, if known.
-   *
-   * @return the currently applied Charset.
-   */
-  public Charset requestCharset() {
-    if (this.body != null) {
-      return this.body.getEncoding().orElse(this.charset);
-    }
-    return this.charset;
-  }
+//  /**
+//   * Charset of the Request Body, if known.
+//   *
+//   * @return the currently applied Charset.
+//   */
+//  public Charset requestCharset() {
+//    if (this.body != null) {
+//      return this.body.getCharset().orElse(this.charset);
+//    }
+//    return this.charset;
+//  }
 
   /**
    * The Request Body.
    *
    * @return the request body.
    */
-  public byte[] body() {
-    return body.asBytes();
+  public Request.Body body() {
+    return body;
   }
 
-  /**
-   * The Request.Body internal object.
-   *
-   * @return the internal Request.Body.
-   * @deprecated this abstraction is leaky and will be removed in later releases.
-   */
-  @Deprecated
-  public Request.Body requestBody() {
-    return this.body;
-  }
+//  /**
+//   * The Request.Body internal object.
+//   *
+//   * @return the internal Request.Body.
+//   * @deprecated this abstraction is leaky and will be removed in later releases.
+//   */
+//  @Deprecated
+//  public Request.Body requestBody() {
+//    return this.body;
+//  }
 
   /**
    * Specify the Body Template to use. Can contain literals and expressions.

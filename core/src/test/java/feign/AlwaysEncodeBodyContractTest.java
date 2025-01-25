@@ -80,7 +80,11 @@ class AlwaysEncodeBodyContractTest {
   private static class SampleClient implements Client {
     @Override
     public Response execute(Request request, Request.Options options) throws IOException {
-      return Response.builder().status(200).request(request).body(request.body()).build();
+      return Response.builder()
+    		  .status(200)
+    		  .request(request)
+    		  .body(Response.Body.createFromRequestBody(request.body()))
+    		  .build();
     }
   }
 

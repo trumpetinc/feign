@@ -603,6 +603,9 @@ public class FeignTest {
     } catch (FeignException e) {
       assertThat(e.getMessage())
           .isEqualTo("timeout reading POST http://localhost:" + server.getPort() + "/");
+      // TODO: KD - I think this test is bad. It is saying that the FeignException should have a *response* body - but there was an IOException - there couldn't possibly have been a response body. I think they are abusing the FeignException responseBody by stuffing the request body content into it.  That's just not right.
+      // TODO: KD - so does contentUTF8 really refer to the request body and not the response body?
+      // TODO: KD - all of this would be much cleaner if the FeignException had a Request and an Optional<Response> - and then anyone could interrogate as they see fit.
       assertThat(e.contentUTF8()).isEqualTo("Request body");
     }
   }
@@ -624,6 +627,9 @@ public class FeignTest {
     } catch (FeignException e) {
       assertThat(e.getMessage())
           .isEqualTo("timeout reading POST http://localhost:" + server.getPort() + "/");
+
+      // TODO: KD - I'm going to argue that this was a bad test.  The response content *is* available, so it should be part of the response that the FeignException has.
+      // TODO: KD - If we change FeignException to capture a Request and Optional<Response>, this stuff will be a lot more intuitive
       assertThat(e.contentUTF8()).isEqualTo("");
     }
   }
@@ -890,19 +896,15 @@ public class FeignTest {
 
   private ResponseMapper upperCaseResponseMapper() {
     return (response, type) -> {
-      try {
         return response.toBuilder()
-            .body(Util.toString(response.body().asReader(UTF_8)).toUpperCase().getBytes())
+            .body(Response.Body.transformResponseBodyAsString(response.body(), s -> s.toUpperCase()))
             .build();
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
     };
   }
 
   private Response responseWithText(String text) {
     return Response.builder()
-        .body(text, Util.UTF_8)
+        .body(Response.Body.create(text.getBytes(Util.UTF_8), Util.UTF_8))
         .status(200)
         .request(Request.create(HttpMethod.GET, "/api", Collections.emptyMap(), null, Util.UTF_8))
         .headers(new HashMap<>())
@@ -1490,7 +1492,7 @@ public class FeignTest {
       Response response = invocationContext.response();
       if (300 <= response.status()) {
         if (String.class.equals(invocationContext.returnType())) {
-          String body = Util.toString(response.body().asReader(Util.UTF_8));
+          String body = Response.Body.bodyAsString(response.body()).orElse("");
           response.close();
           return body;
         }

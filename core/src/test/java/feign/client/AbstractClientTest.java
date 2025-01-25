@@ -290,9 +290,9 @@ public abstract class AbstractClientTest {
     TestInterface api =
         newBuilder().target(TestInterface.class, "http://localhost:" + server.getPort());
 
-    Integer expected = 4;
+    long expected = 4;
     Response response = api.post("");
-    Integer actual = response.body().length();
+    long actual = response.body().length();
     assertThat(actual).isEqualTo(expected);
   }
 
@@ -304,7 +304,7 @@ public abstract class AbstractClientTest {
 
     Response response = api.postWithContentType("foo", "text/plain;charset=utf-8");
     // Response length should not be null
-    assertThat(Util.toString(response.body().asReader(UTF_8))).isEqualTo("AAAAAAAA");
+    assertThat(Response.Body.bodyAsString(response.body()).orElse("")).isEqualTo("AAAAAAAA");
   }
 
   @Test
@@ -315,7 +315,7 @@ public abstract class AbstractClientTest {
 
     Response response = api.postWithContentType("foo", "text/plain");
     // Response length should not be null
-    assertThat(Util.toString(response.body().asReader(UTF_8))).isEqualTo("AAAAAAAA");
+    assertThat(Response.Body.bodyAsString(response.body()).orElse("")).isEqualTo("AAAAAAAA");
   }
 
   @Test

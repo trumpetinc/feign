@@ -43,7 +43,7 @@ public class LoggerMethodsTest {
             .reason("OK")
             .request(request)
             .headers(Collections.emptyMap())
-            .body("some text", UTF_8)
+            .body(Response.Body.create("some text".getBytes(UTF_8), UTF_8))
             .build();
     Response.Body spyBody = spy(response.body());
     response = response.toBuilder().body(spyBody).build();

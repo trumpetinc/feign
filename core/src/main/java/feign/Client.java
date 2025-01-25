@@ -180,7 +180,7 @@ public interface Client {
       boolean deflateEncodedRequest = this.isDeflate(contentEncodingValues);
 
       boolean hasAcceptHeader = false;
-      Integer contentLength = null;
+      Long contentLength = null;
       for (String field : request.headers().keySet()) {
         if (field.equalsIgnoreCase("Accept")) {
           hasAcceptHeader = true;
@@ -188,7 +188,7 @@ public interface Client {
         for (String value : request.headers().get(field)) {
           if (field.equals(CONTENT_LENGTH)) {
             if (!gzipEncodedRequest && !deflateEncodedRequest) {
-              contentLength = Integer.valueOf(value);
+              contentLength = Long.valueOf(value);
               connection.addRequestProperty(field, value);
             }
           }
@@ -206,9 +206,7 @@ public interface Client {
         connection.addRequestProperty("Accept", "*/*");
       }
 
-      byte[] body = request.body();
-
-      if (body != null) {
+      if (request.body().length() != null) {
         /*
          * Ignore disableRequestBuffering flag if the empty body was set, to ensure that internal
          * retry logic applies to such requests.
@@ -228,18 +226,18 @@ public interface Client {
           out = new DeflaterOutputStream(out);
         }
         try {
-          out.write(body);
+        	request.body().asInputStream().transferTo(out);
         } finally {
           try {
             out.close();
           } catch (IOException suppressed) { // NOPMD
           }
         }
-      }
-
-      if (body == null && request.httpMethod().isWithBody()) {
-        // To use this Header, set 'sun.net.http.allowRestrictedHeaders' property true.
-        connection.addRequestProperty("Content-Length", "0");
+      } else {
+          if (request.httpMethod().isWithBody()) {
+              // To use this Header, set 'sun.net.http.allowRestrictedHeaders' property true.
+              connection.addRequestProperty("Content-Length", "0");
+          }
       }
 
       return connection;

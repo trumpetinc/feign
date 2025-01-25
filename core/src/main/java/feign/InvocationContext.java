@@ -18,11 +18,13 @@ package feign;
 import static feign.FeignException.errorReading;
 import static feign.Util.ensureClosed;
 
+import java.io.Closeable;
+import java.io.IOException;
+import java.lang.reflect.Type;
+
 import feign.codec.DecodeException;
 import feign.codec.Decoder;
 import feign.codec.ErrorDecoder;
-import java.io.IOException;
-import java.lang.reflect.Type;
 
 public class InvocationContext {
   private static final long MAX_RESPONSE_BUFFER_SIZE = 8192L;
@@ -71,6 +73,8 @@ public class InvocationContext {
       return disconnectResponseBodyIfNeeded(response);
     }
 
+    boolean noClose = false;
+    
     try {
       final boolean shouldDecodeResponseBody =
           (response.status() >= 200 && response.status() < 300)
@@ -86,24 +90,28 @@ public class InvocationContext {
       }
 
       Class<?> rawType = Types.getRawType(returnType);
+      
+      if (Closeable.class.isAssignableFrom(rawType)) { // if the return type is closable, then it is the callers responsibility to close.
+    	  noClose = true;
+      }
+      
       if (TypedResponse.class.isAssignableFrom(rawType)) {
         Type bodyType = Types.resolveLastTypeParameter(returnType, TypedResponse.class);
         return TypedResponse.builder(response).body(decode(response, bodyType)).build();
       }
 
-      return decode(response, returnType);
+   	  return decode(response, returnType);
     } finally {
-      if (closeAfterDecode) {
+      if (closeAfterDecode && !noClose) {
         ensureClosed(response.body());
       }
     }
   }
 
+  // TODO: KD - I would think that this decision should be based on whether the response entity type is closable or not...  Current logic seems almost magical (if the response length is > buffer size, then it becomes the responsibility of the caller to close?
   private static Response disconnectResponseBodyIfNeeded(Response response) throws IOException {
-    final boolean shouldDisconnectResponseBody =
-        response.body() != null
-            && response.body().length() != null
-            && response.body().length() <= MAX_RESPONSE_BUFFER_SIZE;
+    final boolean shouldDisconnectResponseBody = response.body().length() <= MAX_RESPONSE_BUFFER_SIZE;
+
     if (!shouldDisconnectResponseBody) {
       return response;
     }

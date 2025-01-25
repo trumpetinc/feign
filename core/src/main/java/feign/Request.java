@@ -19,9 +19,14 @@ import static feign.Util.checkNotNull;
 import static feign.Util.getThreadIdentifier;
 import static feign.Util.valuesOrEmpty;
 
+import java.io.ByteArrayInputStream;
+import java.io.Closeable;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.Serializable;
 import java.net.HttpURLConnection;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collection;
@@ -33,6 +38,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 /** An immutable request to an http server. */
+// TODO: KD - technically not immutable anymore if body has isRetryable=false
 public final class Request implements Serializable {
 
   public enum HttpMethod {
@@ -252,8 +258,9 @@ public final class Request implements Serializable {
    *
    * @return the current character set for the request, may be {@literal null} for binary data.
    */
+  // TODO: KD - not sure that returning null is great here.  It seems like it would be better to just let the caller grab the charset from the body (instead of having a dedicated method on the Request) 
   public Charset charset() {
-    return body.encoding;
+    return body.getCharset().orElse(null);
   }
 
   /**
@@ -262,12 +269,13 @@ public final class Request implements Serializable {
    *
    * @see #charset()
    */
-  public byte[] body() {
-    return body.data;
+  public Body body() {
+    return body;
   }
 
+// TODO: KD - Shouldn't contenttype by directly associated with the body (not the request)?  Leaving this for backwards compatibility, but it seems like this should go - we are already making a breaking change with the body() method.
   public boolean isBinary() {
-    return body.isBinary();
+    return body.getCharset().isEmpty();
   }
 
   /**
@@ -275,7 +283,7 @@ public final class Request implements Serializable {
    *
    * @return size of the request body.
    */
-  public int length() {
+  public long length() {
     return this.body.length();
   }
 
@@ -303,13 +311,18 @@ public final class Request implements Serializable {
         .append(' ')
         .append(protocolVersion)
         .append('\n');
+    
+    // TODO: KD - including headers in toString seems really risky - so easy to have that wind up in log output, which could contain the auth header...
+    
     for (final String field : headers.keySet()) {
       for (final String value : valuesOrEmpty(headers, field)) {
         builder.append(field).append(": ").append(value).append('\n');
       }
     }
-    if (body != null) {
-      builder.append('\n').append(body.asString());
+    if (body != null && body.isRepeatable()) {
+      builder
+      	.append('\n')
+      	.append(Body.bodyAsString(body).orElse("-- " + body.length() + " length stream --"));
     }
     return builder.toString();
   }
@@ -512,79 +525,153 @@ public final class Request implements Serializable {
    *
    * <p>Considered experimental, will most likely be made internal going forward.
    */
-  @Experimental
-  public static class Body implements Serializable {
+  // TODO: KD - I am keeping this separate from Request.Body right now to minimize disruption, but it would be a lot cleaner if there was a single interface for Body (functionality appears to be identical between Request and Response)
+  // TODO: KD - consider adding contenttype to Body - this seems like a really natural thing to do, and it could be used to set content type headers... 
+  public interface Body extends Closeable {
 
-    private transient Charset encoding;
+		public static Body create(InputStream inputStream, long length, Charset charset) {
+			return new InputStreamBody(inputStream, length, charset);
+		}
+		
+		public static Body create(byte[] bytes, Charset charset){
+			return new ByteArrayBody(bytes, charset);
+		}
+		
+		public static Body empty() {
+			return new EmptyBody();
+		}
+		
+		public static Optional<String> bodyAsString(Body body) {
+	    	try {
+	  	      return Optional.of( new String(body.asInputStream().readAllBytes(), body.getCharset().orElse(StandardCharsets.UTF_8)) );
+	      	} catch (IOException ignore) {}
+	    	
+	    	return Optional.empty();
+		}
+		
+		// Used for testing only
+		static Optional<byte[]> bodyAsBytes(Body body) {
+			try {
+				return Optional.of( body.asInputStream().readAllBytes() );
+			} catch (IOException e) {
+			}
+			
+			return Optional.empty();
+		}
+		
+	  /**
+	   * length in bytes, if known. Null if unknown or greater than {@link Integer#MAX_VALUE}. <br>
+	   */
+		Long length();
 
-    private byte[] data;
+	  /** True if {@link #asInputStream()} and {@link #asReader()} can be called more than once. */
+	  boolean isRepeatable();
 
-    private Body() {
-      super();
-    }
+	  /** It is the responsibility of the caller to close the stream. */
+	  InputStream asInputStream();
 
-    private Body(byte[] data) {
-      this.data = data;
-    }
-
-    private Body(byte[] data, Charset encoding) {
-      this.data = data;
-      this.encoding = encoding;
-    }
-
-    public Optional<Charset> getEncoding() {
-      return Optional.ofNullable(this.encoding);
-    }
-
-    public int length() {
-      /* calculate the content length based on the data provided */
-      return data != null ? data.length : 0;
-    }
-
-    public byte[] asBytes() {
-      return data;
-    }
-
-    public String asString() {
-      return !isBinary() ? new String(data, encoding) : "Binary data";
-    }
-
-    public boolean isBinary() {
-      return encoding == null || data == null;
-    }
-
-    public static Body create(String data) {
-      return new Body(data.getBytes());
-    }
-
-    public static Body create(String data, Charset charset) {
-      return new Body(data.getBytes(charset), charset);
-    }
-
-    public static Body create(byte[] data) {
-      return new Body(data);
-    }
-
-    public static Body create(byte[] data, Charset charset) {
-      return new Body(data, charset);
-    }
-
-    /**
-     * Creates a new Request Body with charset encoded data.
-     *
-     * @param data to be encoded.
-     * @param charset to encode the data with. if {@literal null}, then data will be considered
-     *     binary and will not be encoded.
-     * @return a new Request.Body instance with the encoded data.
-     * @deprecated please use {@link Request.Body#create(byte[], Charset)}
-     */
-    @Deprecated
-    public static Body encoded(byte[] data, Charset charset) {
-      return create(data, charset);
-    }
-
-    public static Body empty() {
-      return new Body();
-    }
+	  Optional<Charset> getCharset();
+	  
   }
+  
+  private static class EmptyBody implements Body{
+
+	@Override
+	public void close() throws IOException {
+
+	}
+
+	@Override
+	public Long length() {
+		return null;
+	}
+
+	@Override
+	public boolean isRepeatable() {
+		return true;
+	}
+
+	@Override
+	public InputStream asInputStream() {
+		return new ByteArrayInputStream(new byte[0]);
+	}
+
+	@Override
+	public Optional<Charset> getCharset() {
+		return Optional.empty();
+	}
+	  
+  }
+  
+	public static class InputStreamBody implements Body {
+
+	    private final InputStream inputStream;
+	    private final Long length;
+	    private final Optional<Charset> charset;
+
+	    private InputStreamBody(InputStream inputStream, long length, Charset charset) {
+	      this.inputStream = inputStream;
+	      this.length = length;
+	      this.charset = Optional.ofNullable(charset);
+	    }
+
+	    @Override
+	    public Long length() {
+	      return length;
+	    }
+
+	    @Override
+	    public boolean isRepeatable() {
+	      return false;
+	    }
+
+	    @Override
+	    public InputStream asInputStream() {
+	      return inputStream;
+	    }
+
+	    @Override
+	    public Optional<Charset> getCharset() {
+	    	return charset;
+	    }
+	    
+	    @Override
+	    public void close() throws IOException {
+	      inputStream.close();
+	    }
+	  }	
+	
+	public static class ByteArrayBody implements Body {
+
+	    private final byte[] data;
+	    private final Optional<Charset> charset;
+
+	    public ByteArrayBody(byte[] data, Charset charset) {
+	      this.data = data;
+	      this.charset = Optional.ofNullable(charset);
+	    }
+
+	    @Override
+	    public Long length() {
+	      return (long)data.length;
+	    }
+
+	    @Override
+	    public boolean isRepeatable() {
+	      return true;
+	    }
+
+	    @Override
+	    public InputStream asInputStream() {
+	      return new ByteArrayInputStream(data);
+	    }
+
+	    @Override
+	    public Optional<Charset> getCharset() {
+	    	return charset;
+	    }
+	    
+	    @Override
+	    public void close() {}
+	  }	
 }

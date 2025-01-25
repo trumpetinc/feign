@@ -42,7 +42,9 @@ public class FeignException extends RuntimeException {
       "request should not be null";
   private static final long serialVersionUID = 0;
   private final int status;
-  private byte[] responseBody;
+  
+  // TODO: I'm trying to maintain compatibility, but it would be much better if we could break the Body interface out of Request and Response, and have FeignException just have a Body - without regard to whether the exception was triggered by a request or a response. 
+  private Response.Body responseBody;
   private Map<String, Collection<String>> responseHeaders;
   private final Request request;
 
@@ -53,6 +55,20 @@ public class FeignException extends RuntimeException {
   }
 
   protected FeignException(
+	      int status,
+	      String message,
+	      Throwable cause,
+	      Response.Body responseBody,
+	      Map<String, Collection<String>> responseHeaders) {
+	    super(message, cause);
+	    this.status = status;
+	    this.responseBody = createCachedResponseBody(responseBody);
+	    this.responseHeaders = caseInsensitiveCopyOf(responseHeaders);
+	    this.request = null;
+	  }
+  
+  // TOODO: KD - Can we kill or deprecate this constructor?
+  protected FeignException(
       int status,
       String message,
       Throwable cause,
@@ -60,7 +76,7 @@ public class FeignException extends RuntimeException {
       Map<String, Collection<String>> responseHeaders) {
     super(message, cause);
     this.status = status;
-    this.responseBody = responseBody;
+    this.responseBody = Response.Body.create(responseBody, Response.computeCharsetFromHeaders(responseHeaders));
     this.responseHeaders = caseInsensitiveCopyOf(responseHeaders);
     this.request = null;
   }
@@ -71,6 +87,7 @@ public class FeignException extends RuntimeException {
     this.request = null;
   }
 
+  // TOODO: KD - Can we kill or deprecate this constructor?
   protected FeignException(
       int status,
       String message,
@@ -78,7 +95,7 @@ public class FeignException extends RuntimeException {
       Map<String, Collection<String>> responseHeaders) {
     super(message);
     this.status = status;
-    this.responseBody = responseBody;
+    this.responseBody = Response.Body.create(responseBody, Response.computeCharsetFromHeaders(responseHeaders));
     this.responseHeaders = caseInsensitiveCopyOf(responseHeaders);
     this.request = null;
   }
@@ -90,6 +107,43 @@ public class FeignException extends RuntimeException {
   }
 
   protected FeignException(
+	      int status,
+	      String message,
+	      Request request,
+	      Throwable cause,
+	      Response.Body responseBody,
+	      Map<String, Collection<String>> responseHeaders) {
+	    super(message, cause);
+	    this.status = status;
+	    this.responseBody = createCachedResponseBody(responseBody);
+	    this.responseHeaders = caseInsensitiveCopyOf(responseHeaders);
+	    this.request = checkRequestNotNull(request);
+	  }
+
+  /**
+   * We need to cache the response body because we have to close the response stream when the exception gets thrown
+   * @param in the body to cache
+   * @return a cached copy of the input body
+   */
+  private static Response.Body createCachedResponseBody(Response.Body in) {
+	  
+	  final long MAX_RESPONSE_BUFFER_SIZE = 8192L;
+
+	  if ( in.length() > MAX_RESPONSE_BUFFER_SIZE )
+		  return Response.Body.empty();
+
+	    try {
+	      final byte[] bodyData = in.asInputStream().readAllBytes();
+	      return Response.Body.create(bodyData, in.getCharset().orElse(null));
+	    } catch (IOException e) {
+	    	return Response.Body.empty();
+	    } finally {
+	      ensureClosed(in);
+	    }
+	  }
+  
+  // TOODO: KD - Can we kill this constructor or replace it with a Response instead of these response fields?
+  protected FeignException(
       int status,
       String message,
       Request request,
@@ -98,7 +152,7 @@ public class FeignException extends RuntimeException {
       Map<String, Collection<String>> responseHeaders) {
     super(message, cause);
     this.status = status;
-    this.responseBody = responseBody;
+    this.responseBody = Response.Body.create(responseBody, Response.computeCharsetFromHeaders(responseHeaders));
     this.responseHeaders = caseInsensitiveCopyOf(responseHeaders);
     this.request = checkRequestNotNull(request);
   }
@@ -109,6 +163,7 @@ public class FeignException extends RuntimeException {
     this.request = checkRequestNotNull(request);
   }
 
+  // TOODO: KD - Can we kill or deprecate this constructor?  It just seems like everything would be simpler if we captured the request and an optional response.
   protected FeignException(
       int status,
       String message,
@@ -117,7 +172,7 @@ public class FeignException extends RuntimeException {
       Map<String, Collection<String>> responseHeaders) {
     super(message);
     this.status = status;
-    this.responseBody = responseBody;
+    this.responseBody = Response.Body.create(responseBody, Response.computeCharsetFromHeaders(responseHeaders));
     this.responseHeaders = caseInsensitiveCopyOf(responseHeaders);
     this.request = checkRequestNotNull(request);
   }
@@ -136,9 +191,17 @@ public class FeignException extends RuntimeException {
    * @return the body of the response.
    * @deprecated use {@link #responseBody()} instead.
    */
+  // TODO: KD - seems like this could be removed?
   @Deprecated
   public byte[] content() {
-    return this.responseBody;
+	  if (this.responseBody == null) {
+		  return null;
+	  }
+    try {
+		return responseBody.asInputStream().readAllBytes();
+	} catch (IOException wonthappen) {
+		return new byte[0];
+	}
   }
 
   /**
@@ -146,11 +209,19 @@ public class FeignException extends RuntimeException {
    *
    * @return an Optional wrapping the response body.
    */
+  // TODO: KD - Converting to a bytebuffer is such a specific operation, I'm puzzled about why that is being done here...
+  // TODO: KD - seems like this should be deprecated
   public Optional<ByteBuffer> responseBody() {
     if (this.responseBody == null) {
       return Optional.empty();
     }
-    return Optional.of(ByteBuffer.wrap(this.responseBody));
+    
+    try {
+		return Optional.of(ByteBuffer.wrap(responseBody.asInputStream().readAllBytes()));
+	} catch (IOException wonthappen) {
+		return Optional.empty();
+	}
+    
   }
 
   public Map<String, Collection<String>> responseHeaders() {
@@ -168,22 +239,28 @@ public class FeignException extends RuntimeException {
     return (this.request != null);
   }
 
+  // TODO: KD - seems like this should be deprecated
   public String contentUTF8() {
-    if (responseBody != null) {
-      return new String(responseBody, UTF_8);
-    } else {
-      return "";
-    }
+	if (responseBody == null || responseBody.length() == 0)
+		return "";
+	
+    try {
+		return new String(responseBody.asInputStream().readAllBytes(), UTF_8);
+	} catch (IOException e) {
+		throw new RuntimeException(e);
+	}
+	  
   }
 
+  // TODO: KD - this code was originally using the request body and headers as the response body/headers to the constructor - was that a bug?
   static FeignException errorReading(Request request, Response response, IOException cause) {
     return new FeignException(
         response.status(),
         format("%s reading %s %s", cause.getMessage(), request.httpMethod(), request.url()),
         request,
         cause,
-        request.body(),
-        request.headers());
+        response.body(),
+        response.headers());
   }
 
   public static FeignException errorStatus(String methodKey, Response response) {
