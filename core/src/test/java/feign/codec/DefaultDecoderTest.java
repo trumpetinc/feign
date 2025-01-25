@@ -75,7 +75,7 @@ class DefaultDecoderTest {
         .reason("OK")
         .headers(headers)
         .request(Request.create(HttpMethod.GET, "/api", Collections.emptyMap(), null, Util.UTF_8))
-        .body(inputStream, content.length())
+        .body(inputStream, (long)content.length())
         .build();
   }
 

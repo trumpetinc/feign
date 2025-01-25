@@ -61,7 +61,7 @@ class ClientTest {
     headers.put(Util.ACCEPT_ENCODING, acceptEncoding);
 
     RequestTemplate requestTemplate = mock(RequestTemplate.class);
-    Request.Body body = mock(Request.Body.class);
+    Request.Body body = Request.Body.empty();
     Request.Options options = mock(Request.Options.class);
     Client client = mock(Client.class);
 
@@ -82,7 +82,7 @@ class ClientTest {
     headers.put(Util.CONTENT_LENGTH, Collections.singletonList("100"));
 
     RequestTemplate requestTemplate = mock(RequestTemplate.class);
-    Request.Body body = mock(Request.Body.class);
+    Request.Body body = Request.Body.empty();
     Request.Options options = mock(Request.Options.class);
     Client client = mock(Client.class);
 

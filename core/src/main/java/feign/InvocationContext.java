@@ -110,7 +110,7 @@ public class InvocationContext {
 
   // TODO: KD - I would think that this decision should be based on whether the response entity type is closable or not...  Current logic seems almost magical (if the response length is > buffer size, then it becomes the responsibility of the caller to close?
   private static Response disconnectResponseBodyIfNeeded(Response response) throws IOException {
-    final boolean shouldDisconnectResponseBody = response.body().length() <= MAX_RESPONSE_BUFFER_SIZE;
+    final boolean shouldDisconnectResponseBody = response.body().length() != null && response.body().length() <= MAX_RESPONSE_BUFFER_SIZE;
 
     if (!shouldDisconnectResponseBody) {
       return response;

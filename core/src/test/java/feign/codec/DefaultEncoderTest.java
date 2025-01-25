@@ -35,7 +35,7 @@ class DefaultEncoderTest {
     String content = "This is my content";
     RequestTemplate template = new RequestTemplate();
     encoder.encode(content, String.class, template);
-    assertThat(Request.Body.bodyAsString(template.body())).isEqualTo(content);
+    assertThat(Request.Body.bodyAsString(template.body()).orElse("")).isEqualTo(content);
   }
 
   @Test

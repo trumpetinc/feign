@@ -146,7 +146,7 @@ public final class Response implements Closeable {
     /**
      * @see Response#body
      */
-    public Builder body(InputStream inputStream, long length) {
+    public Builder body(InputStream inputStream, Long length) {
     	clearBody();
     	this.bodyInputStream = inputStream;
     	this.bodyLength = length;
@@ -294,7 +294,7 @@ public final class Response implements Closeable {
   // TODO: KD - Request and Response.Body are identical now - I would really like to collapse these to a single interface and class hierarchy...  Maybe HttpBody ?
   public interface Body extends Closeable {
 
-		public static Body create(InputStream inputStream, long length, Charset charset) {
+		public static Body create(InputStream inputStream, Long length, Charset charset) {
 			return new InputStreamBody(inputStream, length, charset);
 		}
 		
@@ -388,7 +388,7 @@ public final class Response implements Closeable {
     private final Long length;
     private final Optional<Charset> charset;
 
-    private InputStreamBody(InputStream inputStream, long length, Charset charset) {
+    private InputStreamBody(InputStream inputStream, Long length, Charset charset) {
       this.inputStream = inputStream;
       this.length = length;
       this.charset = Optional.ofNullable(charset);

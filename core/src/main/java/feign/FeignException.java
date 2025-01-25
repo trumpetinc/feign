@@ -129,7 +129,7 @@ public class FeignException extends RuntimeException {
 	  
 	  final long MAX_RESPONSE_BUFFER_SIZE = 8192L;
 
-	  if ( in.length() > MAX_RESPONSE_BUFFER_SIZE )
+	  if ( in.length() == null || in.length() > MAX_RESPONSE_BUFFER_SIZE )
 		  return Response.Body.empty();
 
 	    try {

@@ -110,7 +110,7 @@ public final class RequestTemplateAssert
       if (actual.body() != null) {
         failWithMessage(
             "\nExpecting requestBody.data to be null, but was:<%s>",
-            Request.Body.bodyAsString(actual.body()) );
+            Request.Body.bodyAsString(actual.body()).orElse("<empty>") );
       }
     }
     return this;

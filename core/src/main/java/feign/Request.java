@@ -529,7 +529,7 @@ public final class Request implements Serializable {
   // TODO: KD - consider adding contenttype to Body - this seems like a really natural thing to do, and it could be used to set content type headers... 
   public interface Body extends Closeable {
 
-		public static Body create(InputStream inputStream, long length, Charset charset) {
+		public static Body create(InputStream inputStream, Long length, Charset charset) {
 			return new InputStreamBody(inputStream, length, charset);
 		}
 		
@@ -609,7 +609,7 @@ public final class Request implements Serializable {
 	    private final Long length;
 	    private final Optional<Charset> charset;
 
-	    private InputStreamBody(InputStream inputStream, long length, Charset charset) {
+	    private InputStreamBody(InputStream inputStream, Long length, Charset charset) {
 	      this.inputStream = inputStream;
 	      this.length = length;
 	      this.charset = Optional.ofNullable(charset);

@@ -129,7 +129,7 @@ public interface Client {
         }
       }
 
-      Integer length = connection.getContentLength();
+      Long length = (long)connection.getContentLength();
       if (length == -1) {
         length = null;
       }
