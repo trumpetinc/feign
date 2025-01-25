@@ -360,6 +360,9 @@ public class FeignBuilderTest {
               public Object next() {
                 try {
                   return Response.Body.bodyAsString(response.body()).orElse("");
+                } catch (IOException e) {
+                    fail("", e.getMessage());
+                    return null;
                 } finally {
                   Util.ensureClosed(response);
                   called = true;

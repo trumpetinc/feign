@@ -76,7 +76,7 @@ public final class RequestTemplateAssert
 
   public RequestTemplateAssert hasBodyTemplate(String expected) {
     isNotNull();
-    if (actual.body() != null) {
+    if (actual.body() != null && actual.body().length() != null) { // TODO: KD - checking for null lengths is really, really not cool.  Does this mean it isn't possible to have an Empty body and avoid nulls???
       failWithMessage("\nExpecting body to be null, but was:<%s>", actual.bodyTemplate());
     }
     objects.assertEqual(info, actual.bodyTemplate(), expected);

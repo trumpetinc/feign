@@ -574,7 +574,7 @@ public final class Request implements Serializable {
 	  
   }
   
-  private static class EmptyBody implements Body{
+  static class EmptyBody implements Body{
 
 	@Override
 	public void close() throws IOException {

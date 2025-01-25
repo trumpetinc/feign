@@ -306,26 +306,26 @@ public final class Response implements Closeable {
 			return new EmptyBody();
 		}
 	  
-		public static Optional<String> bodyAsString(Body body) {
-	    	try {
-	  	      return Optional.of( new String(body.asInputStream().readAllBytes(), body.getCharset().orElse(StandardCharsets.UTF_8)) );
-	      	} catch (IOException ignore) {}
-	    	
-	    	return Optional.empty();
+		public static Optional<String> bodyAsString(Body body) throws IOException {
+			return Optional.of( new String(body.asInputStream().readAllBytes(), body.getCharset().orElse(StandardCharsets.UTF_8)) );
 		}
 		
 		// used for testing
 		static Optional<Reader> bodyAsReader(Body body) {
 			if (body.getCharset().isEmpty()) return Optional.empty();
 			
-			return Optional.of( new InputStreamReader(body.asInputStream(), body.getCharset().orElseThrow()) );
+			return Optional.of( new InputStreamReader(body.asInputStream(), body.getCharset().get()) );
 		}
 		
 		// used for testing
 		static Body transformResponseBodyAsString(Response.Body inBody, Function<String, String> func) {
-			String str = Response.Body.bodyAsString(inBody).orElse("");
-			String alt = func.apply(str);
-			return Response.Body.create(alt.getBytes(), inBody.getCharset().orElse(StandardCharsets.UTF_8));
+			try {
+				String str = Response.Body.bodyAsString(inBody).orElse("");
+				String alt = func.apply(str);
+				return Response.Body.create(alt.getBytes(), inBody.getCharset().orElse(StandardCharsets.UTF_8));
+			} catch (IOException e) {
+				throw new RuntimeException(e);
+			}
 		}
 		
 		// used for testing

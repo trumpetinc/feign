@@ -28,12 +28,16 @@ public class StringDecoder implements Decoder {
   @Override
   public Object decode(Response response, Type type) throws IOException {
     Response.Body body = response.body();
-    if (response.status() == 404 || response.status() == 204 || body == null) {
+    if (response.status() == 404 || response.status() == 204) { 
       return null;
     }
+
+	if (body.length() == null) return null; // TODO: KD - checking the length for null is super ugly.  Any way we can not do this?
+
     if (String.class.equals(type)) {
 // TODO: KD - original code assumed that body encoding was UTF8, hopefully it is OK to use the actual encoding in the Body now?
-    	return Response.Body.bodyAsString(body).orElse("");
+    	String val = Response.Body.bodyAsString(body).orElse("");
+    	return val;
     }
     throw new DecodeException(
         response.status(),
