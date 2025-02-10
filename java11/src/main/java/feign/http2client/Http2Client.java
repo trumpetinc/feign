@@ -15,15 +15,11 @@
  */
 package feign.http2client;
 
-import static feign.Util.*;
+import static feign.Util.CONTENT_ENCODING;
+import static feign.Util.ENCODING_DEFLATE;
+import static feign.Util.ENCODING_GZIP;
+import static feign.Util.enumForName;
 
-import feign.AsyncClient;
-import feign.Client;
-import feign.Request;
-import feign.Request.Options;
-import feign.Request.ProtocolVersion;
-import feign.Response;
-import feign.Util;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.ref.SoftReference;
@@ -56,6 +52,15 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.InflaterInputStream;
+
+import feign.AsyncClient;
+import feign.Client;
+import feign.HttpBodyFactory;
+import feign.Request;
+import feign.Request.Options;
+import feign.Request.ProtocolVersion;
+import feign.Response;
+import feign.Util;
 
 public class Http2Client implements Client, AsyncClient<Object> {
 
@@ -144,7 +149,7 @@ public class Http2Client implements Client, AsyncClient<Object> {
 
     return Response.builder()
         .protocolVersion(enumForName(ProtocolVersion.class, httpResponse.version()))
-        .body(body, length.isPresent() ? (int) length.getAsLong() : null)
+        .body(HttpBodyFactory.forInputStream(body, length.orElse(-1)))
         .reason(httpResponse.headers().firstValue("Reason-Phrase").orElse(null))
         .request(request)
         .status(httpResponse.statusCode())
@@ -216,13 +221,15 @@ public class Http2Client implements Client, AsyncClient<Object> {
     URI uri = new URI(request.url());
 
     final BodyPublisher body;
-    final byte[] data = request.body();
-    if (data == null) {
+    if (request.httpBody().getLength() == 0) {
       body = BodyPublishers.noBody();
     } else {
-      body = BodyPublishers.ofByteArray(data);
+      body = new LengthOverrideBodyPublisher(
+    		  BodyPublishers.ofInputStream(() -> request.httpBody().asInputStream()),
+    		  request.httpBody().getLength()
+    		  );
     }
-
+    
     final Builder requestBuilder =
         HttpRequest.newBuilder()
             .uri(uri)

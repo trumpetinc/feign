@@ -15,13 +15,8 @@
  */
 package feign.hc5;
 
-import static feign.Util.UTF_8;
 import static feign.Util.enumForName;
 
-import feign.Client;
-import feign.Request;
-import feign.Response;
-import feign.Util;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -34,6 +29,8 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+
 import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.hc.client5.http.config.Configurable;
 import org.apache.hc.client5.http.config.RequestConfig;
@@ -53,6 +50,14 @@ import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.hc.core5.http.io.support.ClassicRequestBuilder;
 import org.apache.hc.core5.net.URIBuilder;
 import org.apache.hc.core5.net.URLEncodedUtils;
+
+import feign.Client;
+import feign.HttpBodyFactory;
+import feign.HttpBodyFactory.HttpBody;
+import feign.HttpBodyFactory.PeekResult;
+import feign.Request;
+import feign.Response;
+import feign.Util;
 
 /**
  * This module directs Feign's http requests to Apache's
@@ -109,7 +114,7 @@ public final class ApacheHttp5Client implements Client {
   }
 
   ClassicHttpRequest toClassicHttpRequest(Request request, Request.Options options)
-      throws URISyntaxException {
+      throws URISyntaxException, IOException {
     final ClassicRequestBuilder requestBuilder =
         ClassicRequestBuilder.create(request.httpMethod().name());
 
@@ -230,49 +235,25 @@ public final class ApacheHttp5Client implements Client {
         .build();
   }
 
-  Response.Body toFeignBody(ClassicHttpResponse httpResponse) {
+  HttpBody toFeignBody(ClassicHttpResponse httpResponse) throws IOException {
     final HttpEntity entity = httpResponse.getEntity();
     if (entity == null) {
       return null;
     }
-    return new Response.Body() {
+    
+    Charset encoding = Optional.ofNullable(entity.getContentEncoding()).map(s -> Charset.forName(s)).orElse(null);
+    
+    return
+    		HttpBodyFactory.addCloseHandler(
+    				HttpBodyFactory.forInputStream(entity.getContent(), encoding),
+    				() -> {
+    			        try {
+    			            EntityUtils.consume(entity);
+    			          } finally {
+    			            httpResponse.close();
+    			          }
+    				}
+    		);
 
-      @Override
-      public Integer length() {
-        return entity.getContentLength() >= 0 && entity.getContentLength() <= Integer.MAX_VALUE
-            ? (int) entity.getContentLength()
-            : null;
-      }
-
-      @Override
-      public boolean isRepeatable() {
-        return entity.isRepeatable();
-      }
-
-      @Override
-      public InputStream asInputStream() throws IOException {
-        return entity.getContent();
-      }
-
-      @Override
-      public Reader asReader() throws IOException {
-        return new InputStreamReader(asInputStream(), UTF_8);
-      }
-
-      @Override
-      public Reader asReader(Charset charset) throws IOException {
-        Util.checkNotNull(charset, "charset should not be null");
-        return new InputStreamReader(asInputStream(), charset);
-      }
-
-      @Override
-      public void close() throws IOException {
-        try {
-          EntityUtils.consume(entity);
-        } finally {
-          httpResponse.close();
-        }
-      }
-    };
   }
 }
